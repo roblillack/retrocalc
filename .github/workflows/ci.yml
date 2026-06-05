@@ -1,0 +1,97 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: retrocalc
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: retrocalc
+
+      # retrocalc patches its `saudade` dependency to a sibling checkout
+      # (`path = "../saudade"` in Cargo.toml) so it builds against the same
+      # toolkit version the app is developed with, so the repo must be cloned
+      # next to retrocalc — otherwise even `cargo fmt` fails when cargo can't
+      # resolve the patch.
+      - name: Checkout saudade (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: roblillack/saudade
+          path: saudade
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  ci:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: retrocalc
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: retrocalc
+
+      # See the note in the fmt job: the `saudade` path dependency must be
+      # checked out alongside retrocalc for any cargo command to resolve.
+      - name: Checkout saudade (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: roblillack/saudade
+          path: saudade
+
+      # Linux builds the SCTK Wayland backend + softbuffer's Wayland backend
+      # (via saudade) plus arboard's wl-data-control clipboard, which link
+      # libwayland and libxkbcommon. X11 is loaded via dlopen at runtime, so no
+      # X11 dev packages are needed. macOS/Windows need none.
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev pkg-config
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: retrocalc
+
+      - name: Lint (clippy)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      # retrocalc is a binary-only crate (no library target), so there are no
+      # doctests to run — `cargo test --doc` would fail with "no library targets
+      # found". `--all-targets` already covers the unit and integration tests.
+      - name: Test
+        run: cargo test --workspace --all-targets --all-features
+
+      - name: Build (release)
+        run: cargo build --workspace --release

@@ -1,0 +1,38 @@
+[package]
+name = "retrocalc"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "A retro Windows 3.1-styled calculator for your desktop"
+authors = ["Robert Lillack <rob@lillack.net>"]
+repository = "https://github.com/roblillack/retrocalc"
+homepage = "https://github.com/roblillack/retrocalc"
+license = "MIT"
+readme = "README.md"
+keywords = ["calculator", "calc", "retro", "gui", "win31"]
+categories = ["mathematics", "gui"]
+
+# The screenshot is only used by the README on GitHub/crates.io (via an absolute
+# URL), so it doesn't need to ship inside the published crate.
+exclude = ["screenshot.png"]
+
+[dependencies]
+saudade = "0.1"
+
+# `arboard` backs the Edit menu's Copy / Paste (and the Ctrl+C / Ctrl+V
+# shortcuts). We only ever touch the text clipboard, so `default-features =
+# false` drops the `image-data` feature and the heavy `image` crate it pulls in.
+# The backend split mirrors saudade's own clipboard wiring so retrocalc builds
+# in exactly the same environments saudade does.
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+arboard = { version = "3", default-features = false }
+
+# Use the local saudade checkout so the build picks up the same toolkit the
+# sibling apps (retrofetch, control-panel) develop against, ahead of the next
+# crates.io release. Drop this once a release carrying everything retrocalc uses
+# is published.
+[patch.crates-io]
+saudade = { path = "../saudade" }
