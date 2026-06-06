@@ -1474,7 +1474,9 @@ dependencies = [
 
 [[package]]
 name = "saudade"
-version = "0.1.0"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "474767c99e7a45cc7856b9581a0d2c3fb93ed578c056cb8a29523511527ca0e6"
 dependencies = [
  "arboard",
  "fontdb 0.16.2",
@@ -1491,6 +1493,8 @@ dependencies = [
 [[package]]
 name = "saudade-macros"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58aa6a765067ea26b03da790b2c3843370ea992d216ec9d1c376297213affa9f"
 dependencies = [
  "kurbo",
  "proc-macro2",

@@ -17,7 +17,7 @@ categories = ["mathematics", "gui"]
 exclude = ["screenshot.png"]
 
 [dependencies]
-saudade = "0.1"
+saudade = "0.2"
 
 # `arboard` backs the Edit menu's Copy / Paste (and the Ctrl+C / Ctrl+V
 # shortcuts). We only ever touch the text clipboard, so `default-features =
@@ -29,10 +29,3 @@ arboard = { version = "3", default-features = false, features = ["wayland-data-c
 
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 arboard = { version = "3", default-features = false }
-
-# Use the local saudade checkout so the build picks up the same toolkit the
-# sibling apps (retrofetch, control-panel) develop against, ahead of the next
-# crates.io release. Drop this once a release carrying everything retrocalc uses
-# is published.
-[patch.crates-io]
-saudade = { path = "../saudade" }
