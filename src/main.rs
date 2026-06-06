@@ -29,7 +29,11 @@ const WIDTH: i32 = keypad::NATURAL_WIDTH;
 /// Window-content height: the menu bar plus the keypad.
 const HEIGHT: i32 = MENU_H + keypad::NATURAL_HEIGHT;
 
-const ABOUT_TEXT: &str = "Calculator 0.1.0\n\nA Windows 3.1-styled calculator built\nwith the saudade toolkit.\n\nStandard view, with full keyboard and\nmouse support.";
+const ABOUT_TEXT: &str = concat!(
+    "RetroCalc ",
+    env!("CARGO_PKG_VERSION"),
+    "\n\nA Windows 3.1-styled calculator built\nwith the Saudade toolkit.\n\nStandard view, with full keyboard and\nmouse support.",
+);
 
 fn main() {
     let engine = Rc::new(RefCell::new(Engine::new()));
@@ -70,10 +74,10 @@ fn build_root(engine: Rc<RefCell<Engine>>, about: Rc<RefCell<Dialog>>) -> Column
         ))
         .add_menu(Menu::new(
             "&Help",
-            vec![MenuItem::action("&About Calculator...", {
+            vec![MenuItem::action("&About RetroCalc...", {
                 let about = about.clone();
                 move |cx| {
-                    about.borrow_mut().show_info("About Calculator", ABOUT_TEXT);
+                    about.borrow_mut().show_info("About RetroCalc", ABOUT_TEXT);
                     cx.request_paint();
                 }
             })],
