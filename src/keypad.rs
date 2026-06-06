@@ -170,6 +170,21 @@ pub struct Keypad {
     /// pops back up, drag back and it re-arms, release inside to fire.
     pressed: Option<Btn>,
     over: bool,
+    /// The key shown depressed because a keyboard key is being held, plus the
+    /// base key whose `KeyUp` pops it back up. `KeyDown`/`KeyUp` report the key
+    /// with modifiers stripped, so a shifted operator like `+` arrives as
+    /// `Char('+')` but releases as `KeyUp(Char('='))` — hence we remember the
+    /// base key (`=`) rather than the glyph.
+    held: Option<Btn>,
+    held_key: Option<Key>,
+    /// Base key of the most recent `KeyDown`, so the `Char` it produces can be
+    /// tied back to the physical key that will release it.
+    pending_down: Option<Key>,
+    /// Whether the most recent `KeyDown` was a fresh press rather than OS
+    /// auto-repeat (the same key firing again while still held). A calculator
+    /// acts once per press, so the activation paths consult this and skip the
+    /// repeat events — the key stays depressed, but nothing re-triggers.
+    fresh_press: bool,
 }
 
 impl Keypad {
@@ -183,6 +198,10 @@ impl Keypad {
             indicator_rect: Rect::new(0, 0, 0, 0),
             pressed: None,
             over: false,
+            held: None,
+            held_key: None,
+            pending_down: None,
+            fresh_press: true,
         }
     }
 
@@ -277,68 +296,77 @@ impl Keypad {
 
     // -- keyboard ----------------------------------------------------------
 
-    /// Route a keyboard event to the right handler, gated on focus. Returns
-    /// whether it was consumed.
-    fn handle_keyboard(&self, event: &Event) -> bool {
-        if !self.focused {
-            return false;
-        }
-        match event {
-            Event::KeyDown { key, modifiers } => self.on_key_down(*key, *modifiers),
-            Event::Char { ch, modifiers } => !modifiers.has_command() && self.on_char(*ch),
-            _ => false,
-        }
+    /// Mark `btn` as depressed until the base `key` (the one a matching `KeyUp`
+    /// will carry) is released.
+    fn set_held(&mut self, btn: Btn, key: Key) {
+        self.held = Some(btn);
+        self.held_key = Some(key);
     }
 
-    /// Handle a named/keyboard key. Returns whether it was consumed.
-    fn on_key_down(&self, key: Key, modifiers: saudade::Modifiers) -> bool {
-        // Control chords: clipboard + memory, matching the Win 3.1 / Windows
-        // shortcuts. AltGr (which reports as Ctrl+Alt) is excluded so composing
-        // characters never triggers them.
+    /// Handle a `KeyDown`: named keys plus the Ctrl chords (clipboard + memory),
+    /// matching the Win 3.1 / Windows shortcuts. AltGr (which reports as
+    /// Ctrl+Alt) is excluded so composing characters never triggers them.
+    /// Returns whether the event was consumed.
+    fn handle_key_down(&mut self, key: Key, modifiers: saudade::Modifiers) -> bool {
         if modifiers.control && !modifiers.alt_graph {
-            if let Key::Char(c) = key {
-                match c.to_ascii_lowercase() {
-                    'c' => self.copy(),
-                    'v' => self.paste(),
-                    'l' => self.activate(Btn::MemClear),
-                    'r' => self.activate(Btn::MemRecall),
-                    'm' => self.activate(Btn::MemStore),
-                    'p' => self.activate(Btn::MemAdd),
-                    _ => return false,
+            let Key::Char(c) = key else { return false };
+            match c.to_ascii_lowercase() {
+                'c' => {
+                    if self.fresh_press {
+                        self.copy();
+                    }
                 }
-                return true;
+                'v' => {
+                    if self.fresh_press {
+                        self.paste();
+                    }
+                }
+                other => {
+                    let Some(btn) = btn_for_ctrl(other) else {
+                        return false;
+                    };
+                    if self.fresh_press {
+                        self.activate(btn);
+                    }
+                    self.set_held(btn, key);
+                }
             }
-            return false;
+            return true;
         }
-
         if modifiers.has_command() {
             return false;
         }
-
-        match key {
-            Key::Named(NamedKey::Enter) => self.activate(Btn::Eq),
-            Key::Named(NamedKey::Backspace) => self.activate(Btn::Back),
-            Key::Named(NamedKey::Delete) => self.activate(Btn::ClearEntry),
-            Key::Named(NamedKey::Escape) => self.activate(Btn::ClearAll),
-            _ => return false,
+        let Key::Named(named) = key else { return false };
+        let Some(btn) = btn_for_named(named) else {
+            return false;
+        };
+        if self.fresh_press {
+            self.activate(btn);
         }
+        self.set_held(btn, key);
         true
     }
 
-    /// Handle a text character. Returns whether it was consumed.
-    fn on_char(&self, ch: char) -> bool {
-        match ch {
-            '0'..='9' => self.activate(Btn::Digit(ch as u8 - b'0')),
-            '.' | ',' => self.activate(Btn::Dot),
-            '+' => self.activate(Btn::Add),
-            '-' => self.activate(Btn::Sub),
-            '*' => self.activate(Btn::Mul),
-            '/' => self.activate(Btn::Div),
-            '=' => self.activate(Btn::Eq),
-            '%' => self.activate(Btn::Percent),
-            'r' | 'R' => self.activate(Btn::Recip),
-            '@' | 'q' | 'Q' => self.activate(Btn::Sqrt),
-            _ => return false,
+    /// Handle a text character (a `Char` event). Returns whether it was consumed.
+    fn handle_char(&mut self, ch: char) -> bool {
+        let Some(btn) = btn_for_char(ch) else {
+            return false;
+        };
+        // Fire once per press: the `Char`s that auto-repeat while the key is held
+        // (flagged by the preceding `KeyDown`) keep the key depressed but don't
+        // re-trigger the action.
+        if self.fresh_press {
+            self.activate(btn);
+        }
+        // Depress the key until the base key from the preceding `KeyDown` is
+        // released. If there was none (e.g. a synthesised `Char` in a test),
+        // just show it pressed with nothing to pop it back up.
+        match self.pending_down {
+            Some(key) => self.set_held(btn, key),
+            None => {
+                self.held = Some(btn);
+                self.held_key = None;
+            }
         }
         true
     }
@@ -392,6 +420,45 @@ impl Keypad {
     }
 }
 
+/// The keypad button a text character maps to (driving `Char` events).
+fn btn_for_char(ch: char) -> Option<Btn> {
+    Some(match ch {
+        '0'..='9' => Btn::Digit(ch as u8 - b'0'),
+        '.' | ',' => Btn::Dot,
+        '+' => Btn::Add,
+        '-' => Btn::Sub,
+        '*' => Btn::Mul,
+        '/' => Btn::Div,
+        '=' => Btn::Eq,
+        '%' => Btn::Percent,
+        'r' | 'R' => Btn::Recip,
+        '@' | 'q' | 'Q' => Btn::Sqrt,
+        _ => return None,
+    })
+}
+
+/// The keypad button a named key maps to (driving `KeyDown` events).
+fn btn_for_named(named: NamedKey) -> Option<Btn> {
+    Some(match named {
+        NamedKey::Enter => Btn::Eq,
+        NamedKey::Backspace => Btn::Back,
+        NamedKey::Delete => Btn::ClearEntry,
+        NamedKey::Escape => Btn::ClearAll,
+        _ => return None,
+    })
+}
+
+/// The memory keypad button a (lowercased) Ctrl-chord letter maps to.
+fn btn_for_ctrl(c: char) -> Option<Btn> {
+    Some(match c {
+        'l' => Btn::MemClear,
+        'r' => Btn::MemRecall,
+        'm' => Btn::MemStore,
+        'p' => Btn::MemAdd,
+        _ => return None,
+    })
+}
+
 /// Paint one beveled key with its centred, coloured label, nudged down-right a
 /// pixel while pressed.
 fn paint_key(p: &mut Painter, theme: &Theme, rect: Rect, label: &str, color: Color, pressed: bool) {
@@ -420,10 +487,12 @@ impl Widget for Keypad {
         self.paint_display(p, theme);
         self.paint_indicator(p, theme);
 
-        let pressed = self.pressed;
-        let over = self.over;
+        // A key reads as pressed if the mouse is holding it (and still over it)
+        // or a keyboard key bound to it is being held down.
+        let mouse_down = self.pressed.filter(|_| self.over);
+        let held = self.held;
         for (btn, rect) in &self.keys {
-            let is_down = pressed == Some(*btn) && over;
+            let is_down = mouse_down == Some(*btn) || held == Some(*btn);
             paint_key(p, theme, *rect, btn.label(), btn.color(), is_down);
         }
     }
@@ -462,10 +531,35 @@ impl Widget for Keypad {
                     ctx.request_paint();
                 }
             }
-            Event::KeyDown { .. } | Event::Char { .. } => {
-                let handled = self.handle_keyboard(event);
-                if handled {
+            Event::KeyDown { key, modifiers } => {
+                if self.focused {
+                    // A key that's already down firing again is OS auto-repeat;
+                    // a calculator acts once per press, so flag whether this is a
+                    // fresh press (the activation paths skip repeats). The base
+                    // key is also remembered so the `Char` it generates can be
+                    // tied back to the `KeyUp` that releases it.
+                    self.fresh_press = self.pending_down != Some(*key);
+                    self.pending_down = Some(*key);
+                    if self.handle_key_down(*key, *modifiers) {
+                        ctx.consume_event();
+                        ctx.request_paint();
+                    }
+                }
+            }
+            Event::Char { ch, modifiers } => {
+                if self.focused && !modifiers.has_command() && self.handle_char(*ch) {
                     ctx.consume_event();
+                    ctx.request_paint();
+                }
+            }
+            Event::KeyUp { key, .. } => {
+                if self.pending_down == Some(*key) {
+                    self.pending_down = None;
+                }
+                // Pop the key back up once the physical key that armed it is let go.
+                if self.held_key == Some(*key) {
+                    self.held = None;
+                    self.held_key = None;
                     ctx.request_paint();
                 }
             }
@@ -483,6 +577,13 @@ impl Widget for Keypad {
 
     fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
+        if !focused {
+            // Drop any keyboard-held press so a key doesn't stay stuck down
+            // after focus moves away (e.g. when a menu opens).
+            self.held = None;
+            self.held_key = None;
+            self.pending_down = None;
+        }
     }
 }
 
@@ -509,6 +610,27 @@ mod tests {
     fn key_event(named: NamedKey) -> Event {
         Event::KeyDown {
             key: Key::Named(named),
+            modifiers: Modifiers::default(),
+        }
+    }
+
+    fn key_up(named: NamedKey) -> Event {
+        Event::KeyUp {
+            key: Key::Named(named),
+            modifiers: Modifiers::default(),
+        }
+    }
+
+    fn key_down_char(c: char) -> Event {
+        Event::KeyDown {
+            key: Key::Char(c),
+            modifiers: Modifiers::default(),
+        }
+    }
+
+    fn key_up_char(c: char) -> Event {
+        Event::KeyUp {
+            key: Key::Char(c),
             modifiers: Modifiers::default(),
         }
     }
@@ -642,5 +764,96 @@ mod tests {
             },
         );
         assert_eq!(kp.engine.borrow().display(), "0");
+    }
+
+    #[test]
+    fn a_held_digit_key_shows_depressed_until_release() {
+        let mut kp = keypad();
+        let backend = MockBackend::new(NATURAL_WIDTH, NATURAL_HEIGHT);
+        // A real keystroke is KeyDown(base key) followed by Char(glyph).
+        backend.dispatch(&mut kp, &key_down_char('5'));
+        backend.dispatch(&mut kp, &char_event('5'));
+        assert_eq!(kp.held, Some(Btn::Digit(5)), "the 5 key is held down");
+        // The matching KeyUp pops it back up.
+        backend.dispatch(&mut kp, &key_up_char('5'));
+        assert_eq!(kp.held, None);
+    }
+
+    #[test]
+    fn a_shifted_operator_pops_up_on_its_base_key() {
+        // `+` is typed as Shift+`=`: KeyDown/KeyUp carry the base key `=`, while
+        // the Char carries `+`. The depress must clear on KeyUp of `=`.
+        let mut kp = keypad();
+        let backend = MockBackend::new(NATURAL_WIDTH, NATURAL_HEIGHT);
+        backend.dispatch(&mut kp, &key_down_char('=')); // base key down
+        backend.dispatch(&mut kp, &char_event('+')); // composed glyph
+        assert_eq!(kp.held, Some(Btn::Add));
+        backend.dispatch(&mut kp, &key_up_char('=')); // base key up
+        assert_eq!(kp.held, None, "releasing the base key pops `+` back up");
+    }
+
+    #[test]
+    fn a_held_named_key_shows_depressed_until_release() {
+        let mut kp = keypad();
+        let backend = MockBackend::new(NATURAL_WIDTH, NATURAL_HEIGHT);
+        backend.dispatch(&mut kp, &key_event(NamedKey::Enter));
+        assert_eq!(kp.held, Some(Btn::Eq));
+        backend.dispatch(&mut kp, &key_up(NamedKey::Enter));
+        assert_eq!(kp.held, None);
+    }
+
+    #[test]
+    fn losing_focus_pops_a_held_key_up() {
+        // If focus moves away (a menu opens) mid-hold, the key must not stay stuck.
+        let mut kp = keypad();
+        let backend = MockBackend::new(NATURAL_WIDTH, NATURAL_HEIGHT);
+        backend.dispatch(&mut kp, &key_event(NamedKey::Enter));
+        assert_eq!(kp.held, Some(Btn::Eq));
+        kp.set_focused(false);
+        assert_eq!(kp.held, None);
+    }
+
+    #[test]
+    fn holding_a_digit_key_does_not_auto_repeat() {
+        let mut kp = keypad();
+        let backend = MockBackend::new(NATURAL_WIDTH, NATURAL_HEIGHT);
+        // Press and hold "5": the initial KeyDown+Char types it once; the
+        // auto-repeat KeyDown+Char pairs that follow (no KeyUp between) must not
+        // type more digits.
+        backend.dispatch(&mut kp, &key_down_char('5'));
+        backend.dispatch(&mut kp, &char_event('5'));
+        backend.dispatch(&mut kp, &key_down_char('5')); // auto-repeat
+        backend.dispatch(&mut kp, &char_event('5'));
+        backend.dispatch(&mut kp, &key_down_char('5')); // auto-repeat
+        backend.dispatch(&mut kp, &char_event('5'));
+        assert_eq!(kp.engine.borrow().display(), "5", "a held key types once");
+        // Release and press again: a distinct press types another digit.
+        backend.dispatch(&mut kp, &key_up_char('5'));
+        backend.dispatch(&mut kp, &key_down_char('5'));
+        backend.dispatch(&mut kp, &char_event('5'));
+        assert_eq!(
+            kp.engine.borrow().display(),
+            "55",
+            "a fresh press types again"
+        );
+    }
+
+    #[test]
+    fn holding_enter_evaluates_once() {
+        // 2 + 3, then hold Enter: equals fires once (→ 5). If auto-repeat leaked
+        // through it would keep replaying repeat-equals (5 → 8 → 11 …).
+        let mut kp = keypad();
+        let backend = MockBackend::new(NATURAL_WIDTH, NATURAL_HEIGHT);
+        for ev in [char_event('2'), char_event('+'), char_event('3')] {
+            backend.dispatch(&mut kp, &ev);
+        }
+        backend.dispatch(&mut kp, &key_event(NamedKey::Enter)); // fresh: = → 5
+        backend.dispatch(&mut kp, &key_event(NamedKey::Enter)); // auto-repeat: ignored
+        backend.dispatch(&mut kp, &key_event(NamedKey::Enter)); // auto-repeat: ignored
+        assert_eq!(kp.engine.borrow().display(), "5");
+        // Release and press Enter again: a fresh press replays repeat-equals (+3).
+        backend.dispatch(&mut kp, &key_up(NamedKey::Enter));
+        backend.dispatch(&mut kp, &key_event(NamedKey::Enter));
+        assert_eq!(kp.engine.borrow().display(), "8");
     }
 }
