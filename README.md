@@ -18,7 +18,22 @@ M+), Backspace / CE / C, and Edit ▸ Copy / Paste — all with **perfect keyboa
 and mouse support**. Like the original, it uses **immediate-execution**
 arithmetic (no operator precedence), so `2 + 3 × 4 =` is `20`, not `14`.
 
+
+## Installation
+
+```sh
+cargo install retrocalc
+```
+
 ## Run
+
+After instalation:
+
+```sh
+retrocalc  
+```
+
+Or, after cloning the source code:
 
 ```sh
 cargo run --release
@@ -65,10 +80,8 @@ to fire.
   turns pointer / key presses into engine calls.
 - `main.rs` assembles the window — a `Column` with a menu bar, the keypad, and a
   shared "About" `Dialog` overlay.
-
-A headless test suite (`cargo test`) drives the engine and the widget through
-saudade's `MockBackend`; `cargo test -- --ignored render_screenshot` writes the
-preview image above to `screenshot.png`.
+- A headless test suite (`cargo test`) drives the engine and the widget through
+saudade's `MockBackend`
 
 ## License
 
