@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 32 32">
+  <!-- Program icon: a desktop calculator lying on its side, in the teal of the
+       classic Windows 3.1 program icons. Drawn on a 32-unit grid at whole
+       coordinates throughout, so at 32 px (and any multiple of it) every edge
+       lands on a pixel boundary.
+
+       The case is built in layers, each one painted over the last: a black
+       silhouette with its corners notched off, a cyan rim lit from the top
+       left, a navy shadow along the bottom right, and the teal face inside. -->
+  <defs>
+    <!-- One key: a black cap with a silver face and a single white highlight
+         in its top-left corner, so the black reads as the shadow it casts. -->
+    <g id="key">
+      <rect width="3" height="3" fill="#000000"/>
+      <rect width="2" height="2" fill="#c0c0c0"/>
+      <rect width="1" height="1" fill="#ffffff"/>
+    </g>
+  </defs>
+
+  <!-- Case. -->
+  <path d="M2 6 H30 V7 H31 V26 H30 V27 H2 V26 H1 V7 H2 Z" fill="#000000"/>
+  <rect x="2" y="7" width="28" height="19" fill="#00ffff"/>
+  <rect x="3" y="8" width="27" height="18" fill="#000080"/>
+  <rect x="3" y="8" width="26" height="17" fill="#008080"/>
+
+  <!-- Display: a window sunk into the case — black along its top and left
+       edges, the case's cyan along the bottom and right — showing a silver
+       and white readout. -->
+  <rect x="5" y="9" width="15" height="4" fill="#00ffff"/>
+  <rect x="5" y="9" width="14" height="3" fill="#000000"/>
+  <rect x="6" y="10" width="13" height="1" fill="#c0c0c0"/>
+  <rect x="6" y="11" width="13" height="1" fill="#ffffff"/>
+
+  <!-- Keypad: three rows of six keys on a four-unit pitch. -->
+  <use xlink:href="#key" x="5" y="14"/>
+  <use xlink:href="#key" x="9" y="14"/>
+  <use xlink:href="#key" x="13" y="14"/>
+  <use xlink:href="#key" x="17" y="14"/>
+  <use xlink:href="#key" x="21" y="14"/>
+  <use xlink:href="#key" x="25" y="14"/>
+
+  <use xlink:href="#key" x="5" y="18"/>
+  <use xlink:href="#key" x="9" y="18"/>
+  <use xlink:href="#key" x="13" y="18"/>
+  <use xlink:href="#key" x="17" y="18"/>
+  <use xlink:href="#key" x="21" y="18"/>
+  <use xlink:href="#key" x="25" y="18"/>
+
+  <use xlink:href="#key" x="5" y="22"/>
+  <use xlink:href="#key" x="9" y="22"/>
+  <use xlink:href="#key" x="13" y="22"/>
+  <use xlink:href="#key" x="17" y="22"/>
+  <!-- The last two keys of the bottom row make one wide "=" key, lit along
+       its whole top and left edges. -->
+  <rect x="21" y="22" width="7" height="3" fill="#000000"/>
+  <rect x="21" y="22" width="6" height="2" fill="#ffffff"/>
+  <rect x="22" y="23" width="5" height="1" fill="#c0c0c0"/>
+</svg>

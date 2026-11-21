@@ -16,7 +16,7 @@ use std::rc::Rc;
 
 use saudade::{
     App, Column, Dialog, Event, EventCtx, Menu, MenuBar, MenuItem, Painter, PopupRequest, Rect,
-    Theme, Widget, WindowConfig,
+    SvgImage, Theme, Widget, WindowConfig, include_svg,
 };
 
 use engine::Engine;
@@ -29,6 +29,10 @@ const WIDTH: i32 = keypad::NATURAL_WIDTH;
 /// Window-content height: the menu bar plus the keypad.
 const HEIGHT: i32 = MENU_H + keypad::NATURAL_HEIGHT;
 
+/// The program icon the desktop shows for the window (title bar, task bar,
+/// Alt-Tab switcher, dock), baked from SVG at compile time.
+const ICON: SvgImage = include_svg!("assets/retrocalc.svg");
+
 const ABOUT_TEXT: &str = concat!(
     "RetroCalc ",
     env!("CARGO_PKG_VERSION"),
@@ -40,9 +44,12 @@ fn main() {
     let about = Rc::new(RefCell::new(Dialog::new()));
     let root = build_root(engine, about);
 
-    App::new(WindowConfig::new("Calculator", WIDTH, HEIGHT), root)
-        .with_theme(Theme::windows_31())
-        .run();
+    App::new(
+        WindowConfig::new("Calculator", WIDTH, HEIGHT).icon(ICON),
+        root,
+    )
+    .with_theme(Theme::windows_31())
+    .run();
 }
 
 /// Assemble the whole widget tree. Split out from [`main`] so headless tests can
@@ -207,6 +214,23 @@ mod tests {
         // Paint with no font loaded — must not panic.
         let backend = MockBackend::new(WIDTH, HEIGHT);
         backend.render(&mut root);
+    }
+
+    #[test]
+    fn the_icon_bakes_to_a_calculator_on_a_clear_ground() {
+        // At its native 32 px every edge lands on a whole pixel, so spot-check
+        // a few: clear above the case and at its notched corner, the black
+        // outline, the teal face, and the white highlight of the first key.
+        let rgba = ICON.rasterize_rgba(32);
+        let px = |x: usize, y: usize| {
+            let i = (y * 32 + x) * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        };
+        assert_eq!(px(16, 2)[3], 0, "above the case is transparent");
+        assert_eq!(px(1, 6)[3], 0, "the case's corners are notched off");
+        assert_eq!(px(16, 6), [0x00, 0x00, 0x00, 0xff], "black outline");
+        assert_eq!(px(24, 10), [0x00, 0x80, 0x80, 0xff], "teal face");
+        assert_eq!(px(5, 14), [0xff, 0xff, 0xff, 0xff], "key highlight");
     }
 
     /// Render the calculator to `screenshot.png` for the README. Ignored by
