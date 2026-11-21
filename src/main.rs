@@ -226,11 +226,11 @@ mod tests {
             let i = (y * 32 + x) * 4;
             [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
         };
-        assert_eq!(px(16, 2)[3], 0, "above the case is transparent");
-        assert_eq!(px(1, 6)[3], 0, "the case's corners are notched off");
-        assert_eq!(px(16, 6), [0x00, 0x00, 0x00, 0xff], "black outline");
+        assert_eq!(px(16, 1)[3], 0, "above the case is transparent");
+        assert_eq!(px(1, 3)[3], 0, "the case's corners are notched off");
+        assert_eq!(px(16, 3), [0x00, 0x00, 0x00, 0xff], "black outline");
         assert_eq!(px(24, 10), [0x00, 0x80, 0x80, 0xff], "teal face");
-        assert_eq!(px(5, 14), [0xff, 0xff, 0xff, 0xff], "key highlight");
+        assert_eq!(px(4, 14), [0xff, 0xff, 0xff, 0xff], "key highlight");
     }
 
     /// Render the calculator to `screenshot.png` for the README. Ignored by
