@@ -25,6 +25,15 @@ arithmetic (no operator precedence), so `2 + 3 × 4 =` is `20`, not `14`.
 cargo install retrocalc
 ```
 
+Or build it from a checkout:
+
+```sh
+make
+sudo make install
+```
+
+This installs the program, its desktop entry and its icon under `/usr/local`.
+
 ## Run
 
 After instalation:

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=RetroCalc
+GenericName=Calculator
+Comment=A Windows 3.1-styled calculator
+Exec=retrocalc
+Icon=retrocalc
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=calc;math;arithmetic;
+StartupWMClass=retrocalc
