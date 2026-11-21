@@ -11,7 +11,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use saudade::{
-    Color, Event, EventCtx, Key, MouseButton, NamedKey, Painter, Point, Rect, Theme, Widget,
+    Color, Event, EventCtx, FontFamily, FontStyle, Key, MouseButton, NamedKey, Painter, Point,
+    Rect, Theme, Widget,
 };
 
 use crate::clipboard;
@@ -394,11 +395,20 @@ impl Keypad {
         } else {
             // Numbers are right-aligned, in the monospace face when there is one
             // (an LCD feel) and the proportional face otherwise.
-            let mono = p.measure_mono_text(&text, DISPLAY_FONT);
+            let mono =
+                p.measure_text_styled(&text, DISPLAY_FONT, FontFamily::Mono, FontStyle::Regular);
             if mono.w > 0 {
                 let tx = inner.right() - mono.w;
                 let ty = inner.y + (inner.h - mono.h) / 2;
-                p.mono_text(tx, ty, &text, DISPLAY_FONT, Color::BLACK);
+                p.text_styled(
+                    tx,
+                    ty,
+                    &text,
+                    DISPLAY_FONT,
+                    Color::BLACK,
+                    FontFamily::Mono,
+                    FontStyle::Regular,
+                );
             } else {
                 let size = p.measure_text(&text, DISPLAY_FONT);
                 let tx = inner.right() - size.w;
@@ -502,6 +512,7 @@ impl Widget for Keypad {
             Event::PointerDown {
                 pos,
                 button: MouseButton::Left,
+                ..
             } => {
                 ctx.request_focus();
                 if let Some(btn) = self.key_at(*pos) {
@@ -522,6 +533,7 @@ impl Widget for Keypad {
             Event::PointerUp {
                 pos,
                 button: MouseButton::Left,
+                ..
             } => {
                 if let Some(btn) = self.pressed.take() {
                     if self.key_rect(btn).is_some_and(|r| r.contains(*pos)) {
@@ -727,6 +739,7 @@ mod tests {
             &Event::PointerDown {
                 pos: center,
                 button: MouseButton::Left,
+                modifiers: Modifiers::default(),
             },
         );
         assert_eq!(kp.pressed, Some(Btn::Digit(7)));
@@ -735,6 +748,7 @@ mod tests {
             &Event::PointerUp {
                 pos: center,
                 button: MouseButton::Left,
+                modifiers: Modifiers::default(),
             },
         );
         assert_eq!(kp.engine.borrow().display(), "7");
@@ -752,6 +766,7 @@ mod tests {
             &Event::PointerDown {
                 pos: center,
                 button: MouseButton::Left,
+                modifiers: Modifiers::default(),
             },
         );
         // Release far away (off the button) — nothing fires.
@@ -761,6 +776,7 @@ mod tests {
             &Event::PointerUp {
                 pos: far,
                 button: MouseButton::Left,
+                modifiers: Modifiers::default(),
             },
         );
         assert_eq!(kp.engine.borrow().display(), "0");

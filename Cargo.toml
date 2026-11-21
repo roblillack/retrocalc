@@ -17,7 +17,7 @@ categories = ["mathematics", "gui"]
 exclude = ["screenshot.png"]
 
 [dependencies]
-saudade = "0.2"
+saudade = "0.9"
 
 # `arboard` backs the Edit menu's Copy / Paste (and the Ctrl+C / Ctrl+V
 # shortcuts). We only ever touch the text clipboard, so `default-features =

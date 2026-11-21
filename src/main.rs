@@ -193,6 +193,9 @@ mod tests {
                 modifiers: Modifiers::default(),
             },
         );
+        // A Dialog measures itself (and only then opens its window) on the first
+        // paint after it is shown, so let a frame go by before looking.
+        backend.render(&mut root);
         let mut popups = Vec::new();
         root.collect_popups(&mut popups);
         assert_eq!(popups.len(), 1, "About should open exactly one dialog");
@@ -216,8 +219,8 @@ mod tests {
 
         let (mut root, _engine) = app();
         let mut backend = MockBackend::new(WIDTH, HEIGHT).with_scale(2.0);
-        if let Some(font) = Font::load_system() {
-            backend = backend.with_font(font);
+        if let Some(font) = Font::load_sans() {
+            backend = backend.with_sans_font(font);
         }
 
         // Type a sample value and store it to memory so the "M" indicator lights.
