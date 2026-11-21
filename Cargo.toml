@@ -6,7 +6,6 @@ rust-version = "1.88"
 description = "A retro Windows 3.1-styled calculator for your desktop"
 authors = ["Robert Lillack <rob@lillack.net>"]
 repository = "https://github.com/roblillack/retrocalc"
-homepage = "https://github.com/roblillack/retrocalc"
 license = "MIT"
 readme = "README.md"
 keywords = ["calculator", "calc", "retro", "gui", "win31"]
