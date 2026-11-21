@@ -24,6 +24,56 @@ use crate::engine::{Engine, Op};
 const BLUE: Color = Color::NAVY;
 /// Operator, function and memory keys — painted maroon.
 const MAROON: Color = Color::rgb(0x80, 0x00, 0x00);
+/// [`BLUE`] lifted for the dark theme's charcoal key faces.
+const LIGHT_BLUE: Color = Color::rgb(0xB0, 0xC8, 0xFF);
+/// [`MAROON`] lifted for the dark theme's charcoal key faces.
+const LIGHT_RED: Color = Color::rgb(0xFF, 0xA0, 0xA0);
+
+/// The calculator's own colors, picked to suit the theme it is painted with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Palette {
+    /// Label ink for digit / decimal / sign keys.
+    digit: Color,
+    /// Label ink for operator, function and memory keys — and for error
+    /// messages and the memory indicator, which share their red.
+    operator: Color,
+    /// Fill of the readout and the memory indicator beside it.
+    display_bg: Color,
+    /// The number on the readout.
+    display_text: Color,
+}
+
+impl Palette {
+    /// Light theme: Win 3.1's navy and maroon on gray keys, black on a white
+    /// readout. Dark theme: the same hues lifted so they read on charcoal
+    /// keys, and white on a black readout.
+    fn for_theme(theme: &Theme) -> Self {
+        if is_dark(theme) {
+            Palette {
+                digit: LIGHT_BLUE,
+                operator: LIGHT_RED,
+                display_bg: Color::BLACK,
+                display_text: Color::WHITE,
+            }
+        } else {
+            Palette {
+                digit: BLUE,
+                operator: MAROON,
+                display_bg: Color::WHITE,
+                display_text: Color::BLACK,
+            }
+        }
+    }
+}
+
+/// Whether `theme` is a dark one. Saudade doesn't flag that itself, so go by
+/// what makes a theme dark: its text is lighter than the faces it sits on.
+fn is_dark(theme: &Theme) -> bool {
+    fn luma(c: Color) -> u32 {
+        299 * c.red() as u32 + 587 * c.green() as u32 + 114 * c.blue() as u32
+    }
+    luma(theme.text) > luma(theme.face)
+}
 
 // --- metrics (logical pixels) ----------------------------------------------
 
@@ -108,11 +158,11 @@ impl Btn {
         }
     }
 
-    /// Digit / dot / sign keys read blue; everything else reads maroon.
-    fn color(self) -> Color {
+    /// Digit / dot / sign keys read blue; everything else reads red.
+    fn color(self, palette: &Palette) -> Color {
         match self {
-            Btn::Digit(_) | Btn::Dot | Btn::Neg => BLUE,
-            _ => MAROON,
+            Btn::Digit(_) | Btn::Dot | Btn::Neg => palette.digit,
+            _ => palette.operator,
         }
     }
 }
@@ -374,9 +424,9 @@ impl Keypad {
 
     // -- painting ----------------------------------------------------------
 
-    fn paint_display(&self, p: &mut Painter, theme: &Theme) {
+    fn paint_display(&self, p: &mut Painter, theme: &Theme, palette: &Palette) {
         let r = self.display_rect;
-        p.fill_rect(r, Color::WHITE);
+        p.fill_rect(r, palette.display_bg);
         p.sunken_bevel(r, theme.highlight, theme.shadow);
         p.stroke_rect(r, theme.border);
 
@@ -388,10 +438,10 @@ impl Keypad {
         let inner = r.inset(6);
         let saved = p.push_clip(inner);
         if is_error {
-            // Error messages read as a label: left-aligned, in maroon.
+            // Error messages read as a label: left-aligned, in the operator red.
             let size = p.measure_text(&text, theme.font_size);
             let ty = inner.y + (inner.h - size.h) / 2;
-            p.text(inner.x, ty, &text, theme.font_size, MAROON);
+            p.text(inner.x, ty, &text, theme.font_size, palette.operator);
         } else {
             // Numbers are right-aligned, in the monospace face when there is one
             // (an LCD feel) and the proportional face otherwise.
@@ -405,7 +455,7 @@ impl Keypad {
                     ty,
                     &text,
                     DISPLAY_FONT,
-                    Color::BLACK,
+                    palette.display_text,
                     FontFamily::Mono,
                     FontStyle::Regular,
                 );
@@ -413,19 +463,19 @@ impl Keypad {
                 let size = p.measure_text(&text, DISPLAY_FONT);
                 let tx = inner.right() - size.w;
                 let ty = inner.y + (inner.h - size.h) / 2;
-                p.text(tx, ty, &text, DISPLAY_FONT, Color::BLACK);
+                p.text(tx, ty, &text, DISPLAY_FONT, palette.display_text);
             }
         }
         p.restore_clip(saved);
     }
 
-    fn paint_indicator(&self, p: &mut Painter, theme: &Theme) {
+    fn paint_indicator(&self, p: &mut Painter, theme: &Theme, palette: &Palette) {
         let r = self.indicator_rect;
-        p.fill_rect(r, Color::WHITE);
+        p.fill_rect(r, palette.display_bg);
         p.sunken_bevel(r, theme.highlight, theme.shadow);
         p.stroke_rect(r, theme.border);
         if self.engine.borrow().memory_active() {
-            p.text_centered(r, "M", theme.font_size, MAROON);
+            p.text_centered(r, "M", theme.font_size, palette.operator);
         }
     }
 }
@@ -494,8 +544,9 @@ impl Widget for Keypad {
         // Solid light-gray body, like the classic dialog chrome (no workspace
         // pattern peeking through behind the keys).
         p.fill_rect(self.rect, theme.face);
-        self.paint_display(p, theme);
-        self.paint_indicator(p, theme);
+        let palette = Palette::for_theme(theme);
+        self.paint_display(p, theme, &palette);
+        self.paint_indicator(p, theme, &palette);
 
         // A key reads as pressed if the mouse is holding it (and still over it)
         // or a keyboard key bound to it is being held down.
@@ -503,7 +554,7 @@ impl Widget for Keypad {
         let held = self.held;
         for (btn, rect) in &self.keys {
             let is_down = mouse_down == Some(*btn) || held == Some(*btn);
-            paint_key(p, theme, *rect, btn.label(), btn.color(), is_down);
+            paint_key(p, theme, *rect, btn.label(), btn.color(&palette), is_down);
         }
     }
 
@@ -871,5 +922,22 @@ mod tests {
         backend.dispatch(&mut kp, &key_up(NamedKey::Enter));
         backend.dispatch(&mut kp, &key_event(NamedKey::Enter));
         assert_eq!(kp.engine.borrow().display(), "8");
+    }
+
+    #[test]
+    fn the_palette_follows_the_theme() {
+        let light = Palette::for_theme(&Theme::windows_31());
+        assert_eq!((light.digit, light.operator), (BLUE, MAROON));
+        assert_eq!(
+            (light.display_bg, light.display_text),
+            (Color::WHITE, Color::BLACK)
+        );
+
+        let dark = Palette::for_theme(&Theme::windows_31_dark());
+        assert_eq!((dark.digit, dark.operator), (LIGHT_BLUE, LIGHT_RED));
+        assert_eq!(
+            (dark.display_bg, dark.display_text),
+            (Color::BLACK, Color::WHITE)
+        );
     }
 }
